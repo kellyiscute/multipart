@@ -15,7 +15,7 @@ class _BoundaryFinderPipe {
   final String boundary;
   final int newLineChar = AsciiEncoder().convert("\n").first;
   final int boundaryLastChar;
-  final Utf8Decoder decoder = Utf8Decoder();
+  final Utf8Decoder decoder = Utf8Decoder(allowMalformed: true);
   final CachedBytesBuilder cachedBytesBuilder = CachedBytesBuilder();
   final Future<void> Function(Uint8List, CachedBytesBuilder)
       boundaryReachedCallback;
@@ -23,45 +23,49 @@ class _BoundaryFinderPipe {
   bool findHeaders = false;
 
   _BoundaryFinderPipe(String boundary, this.boundaryReachedCallback)
-      : this.boundary = "\n" + boundary,
+      : this.boundary = "--" + boundary,
         boundaryLastChar = boundary.codeUnitAt(boundary.length - 1);
 
   Future<void> put(int value) async {
     if (findHeaders) {
-      if (pipe.length == 3 && pipe.where((e) => e == newLineChar).length == 3) {
+      if (pipe.length == 2 && pipe.where((e) => e == newLineChar).length == 2) {
         headerBytes.add(pipe);
         pipe.clear();
         findHeaders = false;
       } else {
-        pipe.removeAt(0);
+        if (pipe.length > 2) {
+          pipe.removeAt(0);
+        }
         pipe.add(value);
       }
-      return;
-    }
-
-    if (pipe.length > this.boundary.length) {
-      cached[position] = pipe[0];
-      position++;
-      pipe.removeAt(0);
-    }
-    pipe.add(value);
-    // cache size       ⬇️
-    if (position == 1048575) {
-      await cachedBytesBuilder.add(cached);
-      cached.clear();
-    }
-    // statistically if the first and the last char matches
-    // it likely is the boundary
-    // no data supported!
-    if (pipe.first == newLineChar && pipe.last == boundaryLastChar) {
-      if (decoder.convert(pipe) == boundary) {
-        // push all cached bytes
-        await cachedBytesBuilder.add(cached.getRange(0, position).toList());
+    } else {
+      print(decoder.convert(pipe) + "|" + boundary.replaceAll("\n", ""));
+      if (pipe.length > this.boundary.length) {
+        cached[position] = pipe[0];
+        position++;
+        pipe.removeAt(0);
+      }
+      pipe.add(value);
+      // cache size       ⬇️
+      if (position == 1048575) {
+        await cachedBytesBuilder.add(cached);
         cached.clear();
-        headerBytes.clear();
-        await this
-            .boundaryReachedCallback(headerBytes.toBytes(), cachedBytesBuilder);
-        findHeaders = true;
+      }
+      // statistically if the first and the last char matches
+      // it likely is the boundary
+      // no data supported!
+      if (pipe.first == boundary.codeUnitAt(0) &&
+          pipe.last == boundaryLastChar) {
+        if (decoder.convert(pipe) == boundary) {
+          // push all cached bytes
+          await cachedBytesBuilder.add(cached.getRange(0, position).toList());
+          await this.boundaryReachedCallback(
+              headerBytes.toBytes(), cachedBytesBuilder);
+          cached.fillRange(0, cached.length, 0);
+          headerBytes.clear();
+          pipe.clear();
+          findHeaders = true;
+        }
       }
     }
   }
@@ -129,7 +133,7 @@ class Multipart {
     await for (var data in request) {
       BytesReader reader = BytesReader.fromUint8List(data);
       while (reader.position < reader.data.length) {
-        pipe.put(reader.readByte());
+        await pipe.put(reader.readByte());
       }
     }
     return content;
