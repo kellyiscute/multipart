@@ -13,8 +13,8 @@ class CachedBytesBuilder {
   final List<Uint8List> _chunks = [];
 
   bool get isCached => _cacheFile != null;
-  Future<String> get text async => Utf8Decoder().convert(await toBytes());
-  Future<dynamic> get json async => jsonDecode(await text);
+  Future<String> text() async => Utf8Decoder().convert(await toBytes());
+  Future<dynamic> json() async => jsonDecode((await text()));
 
   CachedBytesBuilder({int? cacheStart}) {
     if (cacheStart != null) {

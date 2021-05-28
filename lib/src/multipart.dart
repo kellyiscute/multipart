@@ -12,9 +12,9 @@ class _BoundaryFinderPipe {
   List<int> pipe = [];
   Uint8List cached = Uint8List(1048576); // 1MB as a chunk
   int position = 0;
-  final String boundary;
-  final int newLineChar = AsciiEncoder().convert("\n").first;
-  final int boundaryLastChar;
+  String boundary;
+  final int newLineChar = "\n".codeUnitAt(0);
+  final int reternChar = "\r".codeUnitAt(0);
   final Utf8Decoder decoder = Utf8Decoder(allowMalformed: true);
   final CachedBytesBuilder cachedBytesBuilder = CachedBytesBuilder();
   final Future<void> Function(Uint8List, CachedBytesBuilder)
@@ -23,29 +23,27 @@ class _BoundaryFinderPipe {
   bool findHeaders = false;
 
   _BoundaryFinderPipe(String boundary, this.boundaryReachedCallback)
-      : this.boundary = "--" + boundary,
-        boundaryLastChar = boundary.codeUnitAt(boundary.length - 1);
+      : this.boundary = "--" + boundary + "\r\n";
 
   Future<void> put(int value) async {
     if (findHeaders) {
-      if (pipe.length == 2 && pipe.where((e) => e == newLineChar).length == 2) {
+      if (pipe.length > 3) {
+        pipe.removeAt(0);
+      }
+      pipe.add(value);
+      if (pipe.length == 4 &&
+          pipe.where((e) => e == newLineChar || e == reternChar).length == 4) {
         headerBytes.add(pipe);
         pipe.clear();
         findHeaders = false;
-      } else {
-        if (pipe.length > 2) {
-          pipe.removeAt(0);
-        }
-        pipe.add(value);
       }
     } else {
-      print(decoder.convert(pipe) + "|" + boundary.replaceAll("\n", ""));
+      pipe.add(value);
       if (pipe.length > this.boundary.length) {
         cached[position] = pipe[0];
         position++;
         pipe.removeAt(0);
       }
-      pipe.add(value);
       // cache size       ⬇️
       if (position == 1048575) {
         await cachedBytesBuilder.add(cached);
@@ -54,8 +52,9 @@ class _BoundaryFinderPipe {
       // statistically if the first and the last char matches
       // it likely is the boundary
       // no data supported!
-      if (pipe.first == boundary.codeUnitAt(0) &&
-          pipe.last == boundaryLastChar) {
+      // number 45 ==> "-"
+      if (pipe.take(2).where((e) => e == 45).length == 2 &&
+          pipe.last == newLineChar) {
         if (decoder.convert(pipe) == boundary) {
           // push all cached bytes
           await cachedBytesBuilder.add(cached.getRange(0, position).toList());
@@ -156,7 +155,8 @@ class Multipart {
         ),
       );
       // dispose the '\n'
-      reader.readByte();
+      print(line);
+      // reader.readByte();
     } while (line != "");
     return params;
   }
