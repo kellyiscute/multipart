@@ -145,8 +145,13 @@ class Multipart {
     RegExp pattern = RegExp(r"([A-z-]*)((:\s)|=)([^;$]*)(;|$)");
     Utf8Decoder decoder = Utf8Decoder();
     Map<String, String> params = {};
+    Uint8List r;
     do {
-      line = decoder.convert(reader.readUntil("\n".codeUnitAt(0)));
+      r = reader.readUntil("\n".codeUnitAt(0));
+      // dispose the '\n'
+      reader.readByte();
+      print(data);
+      line = decoder.convert(r);
       params.addAll(
         Map.fromEntries(
           pattern.allMatches(line).map<MapEntry<String, String>>(
@@ -154,10 +159,7 @@ class Multipart {
               ),
         ),
       );
-      // dispose the '\n'
-      print(line);
-      // reader.readByte();
-    } while (line != "");
+    } while (r.isNotEmpty);
     return params;
   }
 }
