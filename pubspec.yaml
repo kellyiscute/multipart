@@ -1,15 +1,15 @@
 name: multipart
 description: A dart package for decoding multipart/form-data 
-version: 0.1.0
-# homepage: https://www.example.com
+repository: github.com/guo40020/multipart
+version: 0.1.1
 
 environment:
   sdk: '>=2.12.0 <3.0.0'
 
 dependencies:
-  bytes_io:
-  path:
-  nanoid:
+  bytes_io: ^1.0.1
+  path: ^1.8.0
+  nanoid: ^1.0.0
 
 dev_dependencies:
   pedantic: ^1.10.0
