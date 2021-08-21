@@ -47,7 +47,7 @@ class _BoundaryFinderPipe {
       // cache size       ⬇️
       if (position == 1048575) {
         await cachedBytesBuilder.add(cached);
-        cached.clear();
+        position = 0;
       }
       // statistically if the first and the last char matches
       // it likely is the boundary
