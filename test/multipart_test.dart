@@ -12,7 +12,6 @@ void main() async {
       Multipart multipart = Multipart(req);
       var loaded = await multipart.load();
       expect(loaded.length, equals(2));
-      expect(loaded[0].field, "dfg");
     }
   });
 }

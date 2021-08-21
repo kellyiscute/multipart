@@ -15,15 +15,16 @@ class _BoundaryFinderPipe {
   String boundary;
   final int newLineChar = "\n".codeUnitAt(0);
   final int reternChar = "\r".codeUnitAt(0);
+  final int dashChar = "-".codeUnitAt(0);
   final Utf8Decoder decoder = Utf8Decoder(allowMalformed: true);
-  final CachedBytesBuilder cachedBytesBuilder = CachedBytesBuilder();
+  CachedBytesBuilder cachedBytesBuilder = CachedBytesBuilder();
   final Future<void> Function(Uint8List, CachedBytesBuilder)
       boundaryReachedCallback;
   final BytesBuilder headerBytes = BytesBuilder();
   bool findHeaders = false;
 
   _BoundaryFinderPipe(String boundary, this.boundaryReachedCallback)
-      : this.boundary = "--" + boundary + "\r\n";
+      : this.boundary = "--" + boundary;
 
   Future<void> put(int value) async {
     if (findHeaders) {
@@ -31,15 +32,15 @@ class _BoundaryFinderPipe {
         pipe.removeAt(0);
       }
       pipe.add(value);
+      headerBytes.addByte(value);
       if (pipe.length == 4 &&
           pipe.where((e) => e == newLineChar || e == reternChar).length == 4) {
-        headerBytes.add(pipe);
         pipe.clear();
         findHeaders = false;
       }
     } else {
       pipe.add(value);
-      if (pipe.length > this.boundary.length) {
+      if (pipe.length > this.boundary.length + 2) {
         cached[position] = pipe[0];
         position++;
         pipe.removeAt(0);
@@ -54,13 +55,17 @@ class _BoundaryFinderPipe {
       // no data supported!
       // number 45 ==> "-"
       if (pipe.take(2).where((e) => e == 45).length == 2 &&
-          pipe.last == newLineChar) {
-        if (decoder.convert(pipe) == boundary) {
+          (pipe.last == newLineChar || pipe.last == dashChar)) {
+        var converted = decoder.convert(pipe);
+        if (converted.startsWith(boundary) &&
+            (converted.endsWith("--") || converted.endsWith("\r\n"))) {
           // push all cached bytes
           await cachedBytesBuilder.add(cached.getRange(0, position).toList());
           await this.boundaryReachedCallback(
               headerBytes.toBytes(), cachedBytesBuilder);
+          cachedBytesBuilder = CachedBytesBuilder();
           cached.fillRange(0, cached.length, 0);
+          position = 0;
           headerBytes.clear();
           pipe.clear();
           findHeaders = true;
@@ -149,9 +154,11 @@ class Multipart {
     do {
       r = reader.readUntil("\n".codeUnitAt(0));
       // dispose the '\n'
+      if (r.isEmpty) {
+        break;
+      }
       reader.readByte();
-      print(data);
-      line = decoder.convert(r);
+      line = decoder.convert(r).trim();
       params.addAll(
         Map.fromEntries(
           pattern.allMatches(line).map<MapEntry<String, String>>(
@@ -159,7 +166,7 @@ class Multipart {
               ),
         ),
       );
-    } while (r.isNotEmpty);
+    } while (reader.position != reader.data.lengthInBytes);
     return params;
   }
 }
